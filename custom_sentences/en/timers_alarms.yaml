@@ -1,74 +1,73 @@
 language: en
-# Phrasings mapped to HA's built-in timer intent NAMES, which our integration
-# OVERRIDES (see intents.py) so they hit OUR store/ring/tones. Device-exact via
-# intent_obj.device_id. No free-text names (per design): timers are referenced by
-# ORDINAL/index ("timer 1", "the first timer") or by original DURATION ("the 20
-# minute timer") — robust against STT word-misrepresentation.
+# Broad phrasing coverage for HA's classic (no-LLM) hassil matcher. Uses
+# expansion_rules + (a|b) alternatives + [optional] to generate a very large
+# effective sentence set from compact definitions. Mapped to HA's built-in timer
+# intent NAMES, which our integration OVERRIDES (intents.py) so everything hits
+# OUR store/ring/tones. No free-text names (per design) — reference timers by
+# index/ordinal/duration. Device-exact via intent_obj.device_id.
+
+expansion_rules:
+  # units: singular / plural / abbreviations
+  min: "(minute | minutes | minute's | min | mins)"
+  sec: "(second | seconds | second's | sec | secs)"
+  hr: "(hour | hours | hour's | hr | hrs)"
+  # a duration expression, filling {hours}/{minutes}/{seconds}
+  dur: "({hours} <hr> [and] {minutes} <min> | {hours} <hr> | {minutes} <min> [and] {seconds} <sec> | {minutes} <min> | {seconds} <sec>)"
+  # verbs
+  setv: "(set | start | create | make | begin | add | put on | give me | set me | start me | i want | i'd like | i need | can you set | could you set | can you start | please set | please start | put)"
+  canv: "(cancel | stop | delete | remove | kill | end | abort | scrap | clear | get rid of | turn off | shut off)"
+  askv: "(what | which | list | show me | show | tell me | tell me about | read me | read | check | how many | do i have | are there | is there | are there any | got any)"
+  # 'the timer' (singular)
+  thetimer: "[the | my | that | a] timer"
+  # a specific timer reference (index / ordinal / duration)
+  ref: "(timer {index} | [the] {ordinal} timer | [the | my] <dur> timer)"
+
 intents:
   HassStartTimer:
     data:
       - sentences:
-          - "set a timer for {minutes} minute[s]"
-          - "set a {minutes} minute timer"
-          - "start a timer for {minutes} minute[s]"
-          - "set a timer for {seconds} second[s]"
-          - "set a {seconds} second timer"
-          - "set a timer for {hours} hour[s]"
-          - "set a timer for {hours} hour[s] [and] {minutes} minute[s]"
-          - "set a timer for {minutes} minute[s] [and] {seconds} second[s]"
+          - "<setv> [a | an | the | me a | myself a] timer for <dur>"
+          - "<setv> [a | an | the] <dur> timer"
+          - "<setv> [a | an | the] timer <dur>"
+          - "[i want to] set [a | an] <dur> timer"
 
   HassTimerStatus:
     data:
-      - sentences:  # list everything
-          - "what timers are running"
-          - "what timers are set"
-          - "what timers do i have"
-          - "list [my|all] timers"
-          - "list all my timers"
-          - "are there any timers running"
-          - "are there any timers set"
-          - "do i have any timers running"
-          - "do i have any timers"
-          - "how many timers are running"
-          - "timer status"
-          - "how much time is left"
-          - "how much time is left on [the] timer"
-          - "how long is left [on the timer]"
-      - sentences:  # a specific timer
-          - "how much [time] is left on timer {index}"
-          - "how long [is left] on timer {index}"
-          - "how much [time] is left on [the] {ordinal} timer"
-          - "how much [time] is left on [the|my] {minutes} minute timer"
-          - "how much [time] is left on [the|my] {hours} hour timer"
+      - sentences:  # list / enumerate everything
+          - "<askv> [(my | all | all my | the | any)] timers [(there | running | set | going | active | left | on | up | do i have | do i have running | have i got | are mine)]"
+          - "<askv> timers are (there | running | set | going | active | left | up)"
+          - "(what | which) timers (do i have | have i got | are mine) [(running | set | going | left)]"
+          - "how many timers [(are there | are running | are set | are going | do i have | have i got)]"
+          - "any timers [(running | going | set | left)]"
+          - "[what is | what's] [my | the] timer status"
+          - "(check | how are | what about) [my | the] timers"
+          - "what's (on | left on | going on with) [my | the] timers"
+      - sentences:  # time-left, general (the word "timer" is optional)
+          - "how (much | much time | long | much longer | much time is | long is) [is] [left | remaining | to go | until it goes off] [[on] <thetimer>]"
+          - "how much [time] [is] [left | remaining] [[on] <thetimer>]"
+          - "(time | time left | time remaining | how long) [left | remaining] [[on] <thetimer>]"
+          - "when (is | does | will) [<thetimer> | it] (go off | done | up | finish | end | be done | be up)"
+      - sentences:  # time-left, a specific timer
+          - "how (much | much time | long | much longer) [is] [left | remaining | to go] [on] <ref>"
+          - "when (is | does | will) <ref> (go off | done | up | finish | end | be done)"
 
   HassCancelTimer:
     data:
-      - sentences:  # bare + the (single) timer
-          - "stop"
-          - "cancel"
-          - "cancel [the|my] timer"
-          - "stop [the|my] timer"
-          - "delete [the|my] timer"
-      - sentences:  # by index / ordinal
-          - "cancel timer {index}"
-          - "stop timer {index}"
-          - "delete timer {index}"
-          - "cancel [the] {ordinal} timer"
-          - "stop [the] {ordinal} timer"
-      - sentences:  # by original duration
-          - "cancel [the|my] {minutes} minute timer"
-          - "stop [the|my] {minutes} minute timer"
-          - "cancel [the|my] {hours} hour timer"
-          - "stop [the|my] {hours} hour timer"
-          - "cancel [the|my] {seconds} second timer"
-          - "stop [the|my] {seconds} second timer"
+      - sentences:  # bare dismissal (safe: no built-in bare-stop/cancel)
+          - "(stop | cancel | nevermind | never mind | dismiss | forget it | knock it off)"
+      - sentences:  # the (single) timer
+          - "<canv> <thetimer>"
+          - "<canv> [the | my] (running | current | active) timer"
+      - sentences:  # a specific timer
+          - "<canv> <ref>"
 
   HassCancelAllTimers:
     data:
       - sentences:
-          - "cancel all [the|my] timers"
-          - "stop all [the|my] timers"
-          - "clear all [the|my] timers"
+          - "<canv> (all | all the | all my | all of the | all of my | every | each) timer[s]"
+          - "(cancel | clear | delete | remove | stop | wipe | reset) everything"
+          - "(clear | reset | wipe | kill) [all] [of] [my | the] timers"
+          - "get rid of (all | all my | all the | every) [the] timer[s]"
 
 lists:
   hours:
@@ -78,26 +77,18 @@ lists:
   seconds:
     range: {from: 1, to: 600}
   index:
-    range: {from: 1, to: 20}
+    range: {from: 1, to: 50}
   ordinal:
     values:
-      - in: "first"
-        out: 1
-      - in: "1st"
-        out: 1
-      - in: "second"
-        out: 2
-      - in: "2nd"
-        out: 2
-      - in: "third"
-        out: 3
-      - in: "3rd"
-        out: 3
-      - in: "fourth"
-        out: 4
-      - in: "4th"
-        out: 4
-      - in: "fifth"
-        out: 5
-      - in: "5th"
-        out: 5
+      - {in: "first", out: 1}
+      - {in: "1st", out: 1}
+      - {in: "second", out: 2}
+      - {in: "2nd", out: 2}
+      - {in: "third", out: 3}
+      - {in: "3rd", out: 3}
+      - {in: "fourth", out: 4}
+      - {in: "4th", out: 4}
+      - {in: "fifth", out: 5}
+      - {in: "5th", out: 5}
+      - {in: "sixth", out: 6}
+      - {in: "6th", out: 6}
