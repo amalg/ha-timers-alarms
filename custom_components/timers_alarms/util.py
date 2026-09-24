@@ -53,3 +53,15 @@ def spoken_duration(total_seconds: int) -> str:
     if len(parts) == 1:
         return parts[0]
     return " and ".join([", ".join(parts[:-1]), parts[-1]]) if len(parts) > 2 else " and ".join(parts)
+
+
+def spoken_duration_adjective(total_seconds: int) -> str:
+    """Singular-unit form for use as an adjective before 'timer': '20 minute',
+    '1 hour', '90 second'. Falls back to spoken_duration for mixed units."""
+    h, rem = divmod(int(total_seconds), 3600)
+    m, s = divmod(rem, 60)
+    nonzero = [(n, u) for n, u in ((h, "hour"), (m, "minute"), (s, "second")) if n]
+    if len(nonzero) == 1:
+        n, u = nonzero[0]
+        return f"{n} {u}"
+    return spoken_duration(total_seconds)

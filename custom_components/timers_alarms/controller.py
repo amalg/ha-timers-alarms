@@ -125,15 +125,29 @@ class Controller:
             items = [t for t in items if t.device_id == device_id]
         return sorted(items, key=lambda t: t.expires_at)
 
+    def scoped_timers(self, device_id: str | None) -> list[Timer]:
+        """Timers for cancel/list/reference: this device's, else all — ordered by
+        CREATION so ordinals ('timer 1', 'the first timer') are stable and match
+        the listing order."""
+        items = self.timers_for(device_id) or self.timers_for(None)
+        return sorted(items, key=lambda t: t.created_at)
+
+    def find_by_index(self, device_id: str | None, index: int) -> Timer | None:
+        ts = self.scoped_timers(device_id)
+        return ts[index - 1] if 1 <= index <= len(ts) else None
+
+    def find_by_duration(
+        self, device_id: str | None, total_seconds: int
+    ) -> Timer | None:
+        for t in self.scoped_timers(device_id):
+            if t.total_seconds == total_seconds:
+                return t
+        return None
+
     def find_timer(self, device_id: str | None, name: str = "") -> Timer | None:
-        """Best-match a timer for cancel/status: by name if given, else the
-        soonest for this device, else the only one."""
-        candidates = self.timers_for(device_id) or self.timers_for(None)
-        if name:
-            name = name.strip().lower()
-            named = [t for t in candidates if t.name.lower() == name]
-            return named[0] if named else None
-        return candidates[0] if candidates else None
+        """Fallback match: the soonest-created timer for this device."""
+        ts = self.scoped_timers(device_id)
+        return ts[0] if ts else None
 
     async def cancel_timer(self, timer: Timer) -> None:
         self._timers.pop(timer.id, None)

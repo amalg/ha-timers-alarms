@@ -1,10 +1,9 @@
 language: en
-# Comprehensive phrasings mapped to HA's built-in timer intent NAMES, which our
-# integration OVERRIDES (see intents.py) so they hit OUR store/ring/tones.
-# We DO NOT rely on HA's built-in sentences (their coverage is quirky/context-
-# gated — bare "how much time is left" stopped matching once we overrode the
-# handler). Shipping our own set guarantees coverage; built-in sentences that DO
-# match also route to our handlers (bonus). Device-exact via intent_obj.device_id.
+# Phrasings mapped to HA's built-in timer intent NAMES, which our integration
+# OVERRIDES (see intents.py) so they hit OUR store/ring/tones. Device-exact via
+# intent_obj.device_id. No free-text names (per design): timers are referenced by
+# ORDINAL/index ("timer 1", "the first timer") or by original DURATION ("the 20
+# minute timer") — robust against STT word-misrepresentation.
 intents:
   HassStartTimer:
     data:
@@ -17,34 +16,52 @@ intents:
           - "set a timer for {hours} hour[s]"
           - "set a timer for {hours} hour[s] [and] {minutes} minute[s]"
           - "set a timer for {minutes} minute[s] [and] {seconds} second[s]"
-      - sentences:
-          - "set a {name} timer for {minutes} minute[s]"
-          - "set a {minutes} minute {name} timer"
-          - "start a {name} timer for {minutes} minute[s]"
 
   HassTimerStatus:
     data:
-      - sentences:
+      - sentences:  # list everything
+          - "what timers are running"
+          - "what timers are set"
+          - "what timers do i have"
+          - "list [my|all] timers"
+          - "list all my timers"
+          - "are there any timers running"
+          - "are there any timers set"
+          - "do i have any timers running"
+          - "do i have any timers"
+          - "how many timers are running"
+          - "timer status"
           - "how much time is left"
           - "how much time is left on [the] timer"
           - "how long is left [on the timer]"
-          - "how much [time] is left on [the] {name} timer"
-          - "what timers are running"
-          - "what timers are set"
-          - "how many timers are running"
-          - "timer status"
-          - "check [the] timer"
+      - sentences:  # a specific timer
+          - "how much [time] is left on timer {index}"
+          - "how long [is left] on timer {index}"
+          - "how much [time] is left on [the] {ordinal} timer"
+          - "how much [time] is left on [the|my] {minutes} minute timer"
+          - "how much [time] is left on [the|my] {hours} hour timer"
 
   HassCancelTimer:
     data:
-      - sentences:
+      - sentences:  # bare + the (single) timer
           - "stop"
           - "cancel"
           - "cancel [the|my] timer"
           - "stop [the|my] timer"
           - "delete [the|my] timer"
-          - "cancel [the|my] {name} timer"
-          - "stop [the|my] {name} timer"
+      - sentences:  # by index / ordinal
+          - "cancel timer {index}"
+          - "stop timer {index}"
+          - "delete timer {index}"
+          - "cancel [the] {ordinal} timer"
+          - "stop [the] {ordinal} timer"
+      - sentences:  # by original duration
+          - "cancel [the|my] {minutes} minute timer"
+          - "stop [the|my] {minutes} minute timer"
+          - "cancel [the|my] {hours} hour timer"
+          - "stop [the|my] {hours} hour timer"
+          - "cancel [the|my] {seconds} second timer"
+          - "stop [the|my] {seconds} second timer"
 
   HassCancelAllTimers:
     data:
@@ -55,16 +72,32 @@ intents:
 
 lists:
   hours:
-    range:
-      from: 1
-      to: 24
+    range: {from: 1, to: 24}
   minutes:
-    range:
-      from: 1
-      to: 600
+    range: {from: 1, to: 600}
   seconds:
-    range:
-      from: 1
-      to: 600
-  name:
-    wildcard: true
+    range: {from: 1, to: 600}
+  index:
+    range: {from: 1, to: 20}
+  ordinal:
+    values:
+      - in: "first"
+        out: 1
+      - in: "1st"
+        out: 1
+      - in: "second"
+        out: 2
+      - in: "2nd"
+        out: 2
+      - in: "third"
+        out: 3
+      - in: "3rd"
+        out: 3
+      - in: "fourth"
+        out: 4
+      - in: "4th"
+        out: 4
+      - in: "fifth"
+        out: 5
+      - in: "5th"
+        out: 5

@@ -16,7 +16,7 @@ from __future__ import annotations
 from homeassistant.helpers import intent
 
 from .controller import Controller
-from .util import spoken_duration
+from .util import spoken_duration, spoken_duration_adjective
 
 # Built-in intent types we take over.
 INTENT_START = "HassStartTimer"
@@ -61,25 +61,37 @@ class StartTimerHandler(_Base):
         return response
 
 
+def _resolve(controller: Controller, dev: str | None, slots: dict):
+    """Resolve a timer reference: by index/ordinal ('timer 1', 'the first timer'),
+    by original duration ('the 20 minute timer'), else the soonest-created.
+    Returns (timer_or_None, miss_message)."""
+    idx = _int(slots, "index") or _int(slots, "ordinal")
+    dur = _int(slots, "hours") * 3600 + _int(slots, "minutes") * 60 + _int(slots, "seconds")
+    if idx:
+        return controller.find_by_index(dev, idx), f"There's no timer {idx}."
+    if dur > 0:
+        return controller.find_by_duration(dev, dur), f"I don't have a {spoken_duration_adjective(dur)} timer."
+    return controller.find_timer(dev), "I couldn't find a timer."
+
+
 class CancelTimerHandler(_Base):
     intent_type = INTENT_CANCEL
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
-        name = str(_val(intent_obj.slots, "name", "") or "").strip()
+        dev = intent_obj.device_id
         response = intent_obj.create_response()
         # A ringing timer is dismissed first (flush the ring), then confirm.
-        if intent_obj.device_id and await self.controller.stop_ring(intent_obj.device_id):
+        if dev and await self.controller.stop_ring(dev):
             response.async_set_speech("Okay.")
             return response
-        timer = self.controller.find_timer(intent_obj.device_id, name)
+        timer, miss = _resolve(self.controller, dev, intent_obj.slots)
         if timer is None:
-            response.async_set_speech(
-                f"I couldn't find {'that timer' if name else 'a timer'}."
-            )
+            response.async_set_speech(miss)
             return response
         await self.controller.cancel_timer(timer)
-        label = f"the {timer.name} timer" if timer.name else "the timer"
-        response.async_set_speech(f"Canceled {label}.")
+        response.async_set_speech(
+            f"Canceled the {spoken_duration_adjective(timer.total_seconds)} timer."
+        )
         return response
 
 
@@ -102,29 +114,36 @@ class TimerStatusHandler(_Base):
     intent_type = INTENT_STATUS
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
-        name = str(_val(intent_obj.slots, "name", "") or "").strip()
+        dev = intent_obj.device_id
+        s = intent_obj.slots
         response = intent_obj.create_response()
-        if name:
-            timer = self.controller.find_timer(intent_obj.device_id, name)
+        # A specific timer referenced by index/ordinal/duration?
+        if _int(s, "index") or _int(s, "ordinal") or (
+            _int(s, "hours") + _int(s, "minutes") + _int(s, "seconds") > 0
+        ):
+            timer, _miss = _resolve(self.controller, dev, s)
             response.async_set_speech(
-                f"There's no {name} timer." if timer is None
-                else f"{spoken_duration(timer.remaining())} left on the {name} timer."
+                "I couldn't find that timer." if timer is None
+                else f"The {spoken_duration_adjective(timer.total_seconds)} timer has "
+                     f"{spoken_duration(timer.remaining())} left."
             )
             return response
-        timers = self.controller.timers_for(intent_obj.device_id) or self.controller.timers_for(None)
+        timers = self.controller.scoped_timers(dev)
         if not timers:
             response.async_set_speech("No timers are running.")
         elif len(timers) == 1:
             t = timers[0]
-            lbl = f"the {t.name} timer" if t.name else "the timer"
-            response.async_set_speech(f"{spoken_duration(t.remaining())} left on {lbl}.")
+            response.async_set_speech(
+                f"You have one timer, set for {spoken_duration(t.total_seconds)}, "
+                f"with {spoken_duration(t.remaining())} left."
+            )
         else:
             parts = [
-                f"{spoken_duration(t.remaining())} on {t.name}" if t.name
-                else spoken_duration(t.remaining())
-                for t in timers
+                f"Timer {i}, set for {spoken_duration(t.total_seconds)}, "
+                f"has {spoken_duration(t.remaining())} left"
+                for i, t in enumerate(timers, 1)
             ]
-            response.async_set_speech(f"{len(timers)} timers: " + "; ".join(parts) + ".")
+            response.async_set_speech(f"You have {len(timers)} timers. " + ". ".join(parts) + ".")
         return response
 
 
