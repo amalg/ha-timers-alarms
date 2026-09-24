@@ -1,46 +1,56 @@
-"""Intent handlers. Device-exact via intent_obj.device_id.
+"""Intent handlers — device-exact via intent_obj.device_id.
 
-Intent names must match the phrasings shipped in custom_sentences/.
+We OVERRIDE Home Assistant's built-in timer intent handlers (register our
+handlers under the built-in intent_types). HA's comprehensive built-in timer
+sentences then route into OUR logic (our store, device-exact ring, our tones),
+with no sentence-matching gaps and no native timers slipping through. Extra
+phrasings (bare "stop"/"cancel", "what timers are running") are added in
+custom_sentences mapped to these same intent_types.
+
+No slot_schema: built-in sentences may send timer-identifying slots we don't use
+(start_hours/start_minutes/name/…); we read leniently and ignore the rest.
 """
 
 from __future__ import annotations
 
-import voluptuous as vol
-
-from homeassistant.helpers import config_validation as cv, intent
+from homeassistant.helpers import intent
 
 from .controller import Controller
 from .util import spoken_duration
 
-INTENT_START_TIMER = "TimersAlarmsStartTimer"
-INTENT_CANCEL_TIMER = "TimersAlarmsCancelTimer"
-INTENT_CANCEL_ALL_TIMERS = "TimersAlarmsCancelAllTimers"
-INTENT_TIMER_STATUS = "TimersAlarmsTimerStatus"
-INTENT_STOP_RINGING = "TimersAlarmsStopRinging"
+# Built-in intent types we take over.
+INTENT_START = "HassStartTimer"
+INTENT_CANCEL = "HassCancelTimer"
+INTENT_CANCEL_ALL = "HassCancelAllTimers"
+INTENT_STATUS = "HassTimerStatus"
+
+
+def _val(slots: dict, key: str, default=None):
+    v = slots.get(key)
+    return v.get("value", default) if isinstance(v, dict) else default
+
+
+def _int(slots: dict, key: str) -> int:
+    try:
+        return int(_val(slots, key, 0) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 class _Base(intent.IntentHandler):
+    slot_schema = None  # accept any slots the built-in sentences produce
+
     def __init__(self, controller: Controller) -> None:
         self.controller = controller
 
 
 class StartTimerHandler(_Base):
-    intent_type = INTENT_START_TIMER
-    slot_schema = {
-        vol.Optional("hours"): cv.positive_int,
-        vol.Optional("minutes"): cv.positive_int,
-        vol.Optional("seconds"): cv.positive_int,
-        vol.Optional("name"): cv.string,
-    }
+    intent_type = INTENT_START
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
-        slots = self.async_validate_slots(intent_obj.slots)
-        h = slots.get("hours", {}).get("value", 0) or 0
-        m = slots.get("minutes", {}).get("value", 0) or 0
-        s = slots.get("seconds", {}).get("value", 0) or 0
-        name = (slots.get("name", {}).get("value") or "").strip()
-        total = int(h) * 3600 + int(m) * 60 + int(s)
-
+        s = intent_obj.slots
+        total = _int(s, "hours") * 3600 + _int(s, "minutes") * 60 + _int(s, "seconds")
+        name = str(_val(s, "name", "") or "").strip()
         response = intent_obj.create_response()
         if total <= 0:
             response.async_set_speech("Sorry, how long should the timer be?")
@@ -52,19 +62,15 @@ class StartTimerHandler(_Base):
 
 
 class CancelTimerHandler(_Base):
-    intent_type = INTENT_CANCEL_TIMER
-    slot_schema = {vol.Optional("name"): cv.string}
+    intent_type = INTENT_CANCEL
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
-        slots = self.async_validate_slots(intent_obj.slots)
-        name = (slots.get("name", {}).get("value") or "").strip()
+        name = str(_val(intent_obj.slots, "name", "") or "").strip()
         response = intent_obj.create_response()
-
-        # "cancel"/"stop" while ringing dismisses the ring first.
+        # A ringing timer is dismissed first (flush the ring), then confirm.
         if intent_obj.device_id and await self.controller.stop_ring(intent_obj.device_id):
             response.async_set_speech("Okay.")
             return response
-
         timer = self.controller.find_timer(intent_obj.device_id, name)
         if timer is None:
             response.async_set_speech(
@@ -78,7 +84,7 @@ class CancelTimerHandler(_Base):
 
 
 class CancelAllTimersHandler(_Base):
-    intent_type = INTENT_CANCEL_ALL_TIMERS
+    intent_type = INTENT_CANCEL_ALL
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
         response = intent_obj.create_response()
@@ -86,30 +92,25 @@ class CancelAllTimersHandler(_Base):
             await self.controller.stop_ring(intent_obj.device_id)
         n = await self.controller.cancel_all_timers(intent_obj.device_id)
         response.async_set_speech(
-            "No timers to cancel." if n == 0 else f"Canceled {n} timer{'s' if n != 1 else ''}."
+            "No timers to cancel." if n == 0
+            else f"Canceled {n} timer{'s' if n != 1 else ''}."
         )
         return response
 
 
 class TimerStatusHandler(_Base):
-    intent_type = INTENT_TIMER_STATUS
-    slot_schema = {vol.Optional("name"): cv.string}
+    intent_type = INTENT_STATUS
 
     async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
-        slots = self.async_validate_slots(intent_obj.slots)
-        name = (slots.get("name", {}).get("value") or "").strip()
+        name = str(_val(intent_obj.slots, "name", "") or "").strip()
         response = intent_obj.create_response()
-
         if name:
             timer = self.controller.find_timer(intent_obj.device_id, name)
-            if timer is None:
-                response.async_set_speech(f"There's no {name} timer.")
-            else:
-                response.async_set_speech(
-                    f"{spoken_duration(timer.remaining())} left on the {name} timer."
-                )
+            response.async_set_speech(
+                f"There's no {name} timer." if timer is None
+                else f"{spoken_duration(timer.remaining())} left on the {name} timer."
+            )
             return response
-
         timers = self.controller.timers_for(intent_obj.device_id) or self.controller.timers_for(None)
         if not timers:
             response.async_set_speech("No timers are running.")
@@ -120,34 +121,19 @@ class TimerStatusHandler(_Base):
         else:
             parts = [
                 f"{spoken_duration(t.remaining())} on {t.name}" if t.name
-                else f"{spoken_duration(t.remaining())}"
+                else spoken_duration(t.remaining())
                 for t in timers
             ]
             response.async_set_speech(f"{len(timers)} timers: " + "; ".join(parts) + ".")
         return response
 
 
-class StopRingingHandler(_Base):
-    intent_type = INTENT_STOP_RINGING
-
-    async def async_handle(self, intent_obj: intent.Intent) -> intent.IntentResponse:
-        response = intent_obj.create_response()
-        stopped = False
-        if intent_obj.device_id:
-            stopped = await self.controller.stop_ring(intent_obj.device_id)
-        # Deliberately terse; the ring is already flushed before this speaks.
-        response.async_set_speech("Okay." if stopped else "Nothing is ringing.")
-        return response
-
-
 def async_register(controller: Controller) -> list[intent.IntentHandler]:
-    """Register all handlers; return them so they can be removed on unload."""
     handlers: list[intent.IntentHandler] = [
         StartTimerHandler(controller),
         CancelTimerHandler(controller),
         CancelAllTimersHandler(controller),
         TimerStatusHandler(controller),
-        StopRingingHandler(controller),
     ]
     for h in handlers:
         intent.async_register(controller.hass, h)

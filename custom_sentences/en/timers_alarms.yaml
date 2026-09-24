@@ -1,9 +1,12 @@
 language: en
-# Sentences for the Voice Timers & Alarms integration (M1: timers).
-# Deploy to config/custom_sentences/en/ alongside the custom_components dir.
-# Intent names map to the Python IntentHandlers in intents.py.
+# Comprehensive phrasings mapped to HA's built-in timer intent NAMES, which our
+# integration OVERRIDES (see intents.py) so they hit OUR store/ring/tones.
+# We DO NOT rely on HA's built-in sentences (their coverage is quirky/context-
+# gated — bare "how much time is left" stopped matching once we overrode the
+# handler). Shipping our own set guarantees coverage; built-in sentences that DO
+# match also route to our handlers (bonus). Device-exact via intent_obj.device_id.
 intents:
-  TimersAlarmsStartTimer:
+  HassStartTimer:
     data:
       - sentences:
           - "set a timer for {minutes} minute[s]"
@@ -19,12 +22,20 @@ intents:
           - "set a {minutes} minute {name} timer"
           - "start a {name} timer for {minutes} minute[s]"
 
-  # Bare "stop"/"cancel" route here on purpose: CancelTimerHandler dismisses a
-  # RINGING timer first (flush), else cancels the counting timer, else says it
-  # can't find one. HA has no built-in bare-"stop"/"cancel" intent to shadow
-  # (it was "couldn't understand" before), so claiming them is safe and gives the
-  # natural Alexa-like dismissal. Device-exact via intent_obj.device_id.
-  TimersAlarmsCancelTimer:
+  HassTimerStatus:
+    data:
+      - sentences:
+          - "how much time is left"
+          - "how much time is left on [the] timer"
+          - "how long is left [on the timer]"
+          - "how much [time] is left on [the] {name} timer"
+          - "what timers are running"
+          - "what timers are set"
+          - "how many timers are running"
+          - "timer status"
+          - "check [the] timer"
+
+  HassCancelTimer:
     data:
       - sentences:
           - "stop"
@@ -35,38 +46,12 @@ intents:
           - "cancel [the|my] {name} timer"
           - "stop [the|my] {name} timer"
 
-  TimersAlarmsCancelAllTimers:
+  HassCancelAllTimers:
     data:
       - sentences:
           - "cancel all [the|my] timers"
-          - "clear all [the|my] timers"
-          - "cancel [my] timers"
           - "stop all [the|my] timers"
-
-  TimersAlarmsTimerStatus:
-    data:
-      - sentences:
-          - "how much time is left"
-          - "how much time is left on [the] timer"
-          - "how long is left [on the timer]"
-          - "how much time is left on [the] {name} timer"
-          - "what timers are running"
-          - "what timers are set"
-          - "how many timers are running"
-          - "timer status"
-
-  # Deliberately NOT greedy: bare "stop"/"quiet"/"turn it off" would shadow media
-  # and device commands household-wide (hassil matching is stateless — we can't
-  # claim "stop" only while ringing). A ringing timer is dismissed via
-  # "stop/cancel the timer" (CancelTimer flushes the ring first). Natural bare-"stop"
-  # dismissal-while-ringing is deferred to M5 (stateful dismissal). Alarm forms
-  # here are ready for M3.
-  TimersAlarmsStopRinging:
-    data:
-      - sentences:
-          - "stop [the] (alarm | ringing)"
-          - "dismiss [the] (alarm | timer | ringing)"
-          - "stop [the] ringing alarm"
+          - "clear all [the|my] timers"
 
 lists:
   hours:
