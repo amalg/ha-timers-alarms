@@ -48,17 +48,18 @@ intents:
           - "how many timers are running"
           - "timer status"
 
+  # Deliberately NOT greedy: bare "stop"/"quiet"/"turn it off" would shadow media
+  # and device commands household-wide (hassil matching is stateless — we can't
+  # claim "stop" only while ringing). A ringing timer is dismissed via
+  # "stop/cancel the timer" (CancelTimer flushes the ring first). Natural bare-"stop"
+  # dismissal-while-ringing is deferred to M5 (stateful dismissal). Alarm forms
+  # here are ready for M3.
   TimersAlarmsStopRinging:
     data:
       - sentences:
-          - "stop"
-          - "dismiss"
-          - "silence"
-          - "quiet"
-          - "enough"
-          - "turn it off"
           - "stop [the] (alarm | ringing)"
-          - "dismiss [the] (alarm | timer)"
+          - "dismiss [the] (alarm | timer | ringing)"
+          - "stop [the] ringing alarm"
 
 lists:
   hours:
