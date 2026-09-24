@@ -61,13 +61,16 @@ intents:
       - sentences:  # a specific timer
           - "<canv> <ref>"
 
+  # Plural "timers" (even with just one set) => cancel all. Quantifier optional,
+  # so "cancel timers" / "stop timers" / "cancel my timers" / "clear the timers"
+  # all match; singular "cancel timer" stays with CancelTimer (the single one).
   HassCancelAllTimers:
     data:
       - sentences:
-          - "<canv> (all | all the | all my | all of the | all of my | every | each) timer[s]"
+          - "<canv> [(all | all the | all my | all of the | all of my | every | each | my | the)] timers"
           - "(cancel | clear | delete | remove | stop | wipe | reset) everything"
           - "(clear | reset | wipe | kill) [all] [of] [my | the] timers"
-          - "get rid of (all | all my | all the | every) [the] timer[s]"
+          - "get rid of [(all | all my | all the | every | my | the)] timers"
 
 lists:
   hours:
