@@ -19,9 +19,16 @@ intents:
           - "set a {minutes} minute {name} timer"
           - "start a {name} timer for {minutes} minute[s]"
 
+  # Bare "stop"/"cancel" route here on purpose: CancelTimerHandler dismisses a
+  # RINGING timer first (flush), else cancels the counting timer, else says it
+  # can't find one. HA has no built-in bare-"stop"/"cancel" intent to shadow
+  # (it was "couldn't understand" before), so claiming them is safe and gives the
+  # natural Alexa-like dismissal. Device-exact via intent_obj.device_id.
   TimersAlarmsCancelTimer:
     data:
       - sentences:
+          - "stop"
+          - "cancel"
           - "cancel [the|my] timer"
           - "stop [the|my] timer"
           - "delete [the|my] timer"
