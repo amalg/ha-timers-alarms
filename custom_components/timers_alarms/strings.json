@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Voice Timers & Alarms",
+        "description": "Adds device-exact voice timers and alarms. Configure tones and options after setup."
+      }
+    },
+    "abort": { "already_configured": "Voice Timers & Alarms is already set up." }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Voice Timers & Alarms options",
+        "data": {
+          "enable_timers": "Enable timers",
+          "enable_alarms": "Enable alarms",
+          "fallback_media_player": "Fallback media player (used only when the device you speak to has no speaker)"
+        }
+      }
+    }
+  }
+}

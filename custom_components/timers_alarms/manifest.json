@@ -1,0 +1,14 @@
+{
+  "domain": "timers_alarms",
+  "name": "Voice Timers & Alarms",
+  "version": "0.1.0",
+  "config_flow": true,
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "dependencies": ["conversation"],
+  "after_dependencies": ["media_player", "assist_satellite"],
+  "codeowners": ["@amalg"],
+  "documentation": "https://github.com/amalg/ha-timers-alarms",
+  "issue_tracker": "https://github.com/amalg/ha-timers-alarms/issues",
+  "requirements": []
+}
