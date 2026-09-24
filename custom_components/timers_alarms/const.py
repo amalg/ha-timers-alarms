@@ -23,11 +23,16 @@ DEFAULTS = {
     CONF_MAX_RING_SECONDS: 120,        # safety cap on a ring nobody dismisses
 }
 
-# Tone library. id -> (label, filename under tones/). "default" must always exist
-# and should be a CC-licensed sound (resale hygiene). Filled out in M4.
-TONES: dict[str, tuple[str, str]] = {
-    "default": ("Default (CC)", "default.flac"),
+# Tone library. id -> (label, filename under tones/, duration_seconds).
+# "default" must always exist and should be a CC-licensed sound (resale hygiene).
+# The full Alexa library is bundled in M4; for M1 we ship the CC default only.
+TONES: dict[str, tuple[str, str, float]] = {
+    "default": ("Default (CC)", "default.flac", 2.7),
 }
+
+# Tones are served to media players from this URL path (static path registered
+# in async_setup_entry).
+STATIC_URL_PATH = f"/{DOMAIN}/tones"
 
 # Storage
 STORAGE_KEY = f"{DOMAIN}.state"

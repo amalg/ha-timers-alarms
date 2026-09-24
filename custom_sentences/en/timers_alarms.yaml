@@ -1,0 +1,77 @@
+language: en
+# Sentences for the Voice Timers & Alarms integration (M1: timers).
+# Deploy to config/custom_sentences/en/ alongside the custom_components dir.
+# Intent names map to the Python IntentHandlers in intents.py.
+intents:
+  TimersAlarmsStartTimer:
+    data:
+      - sentences:
+          - "set a timer for {minutes} minute[s]"
+          - "set a {minutes} minute timer"
+          - "start a timer for {minutes} minute[s]"
+          - "set a timer for {seconds} second[s]"
+          - "set a {seconds} second timer"
+          - "set a timer for {hours} hour[s]"
+          - "set a timer for {hours} hour[s] [and] {minutes} minute[s]"
+          - "set a timer for {minutes} minute[s] [and] {seconds} second[s]"
+      - sentences:
+          - "set a {name} timer for {minutes} minute[s]"
+          - "set a {minutes} minute {name} timer"
+          - "start a {name} timer for {minutes} minute[s]"
+
+  TimersAlarmsCancelTimer:
+    data:
+      - sentences:
+          - "cancel [the|my] timer"
+          - "stop [the|my] timer"
+          - "delete [the|my] timer"
+          - "cancel [the|my] {name} timer"
+          - "stop [the|my] {name} timer"
+
+  TimersAlarmsCancelAllTimers:
+    data:
+      - sentences:
+          - "cancel all [the|my] timers"
+          - "clear all [the|my] timers"
+          - "cancel [my] timers"
+          - "stop all [the|my] timers"
+
+  TimersAlarmsTimerStatus:
+    data:
+      - sentences:
+          - "how much time is left"
+          - "how much time is left on [the] timer"
+          - "how long is left [on the timer]"
+          - "how much time is left on [the] {name} timer"
+          - "what timers are running"
+          - "what timers are set"
+          - "how many timers are running"
+          - "timer status"
+
+  TimersAlarmsStopRinging:
+    data:
+      - sentences:
+          - "stop"
+          - "dismiss"
+          - "silence"
+          - "quiet"
+          - "enough"
+          - "turn it off"
+          - "stop [the] (alarm | ringing)"
+          - "dismiss [the] (alarm | timer)"
+
+lists:
+  hours:
+    range:
+      from: 1
+      to: 24
+  minutes:
+    range:
+      from: 1
+      to: 600
+  seconds:
+    range:
+      from: 1
+      to: 600
+  name:
+    wildcard: true
