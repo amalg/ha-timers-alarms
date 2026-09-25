@@ -18,7 +18,11 @@ expansion_rules:
   dur: "({hours} <hr> [and] {minutes} <min> | {hours} <hr> | {minutes} <min> [and] {seconds} <sec> | {minutes} <min> | {seconds} <sec>)"
   # a TIME-OF-DAY expression -> fills {time_hour}/{time_minute}/{meridiem}/{named_time}/{past_min}/{to_min}
   oclock: "(o'clock | oclock | o clock)"
-  tod: "({named_time} | {past_min} {time_hour} [{meridiem}] | {to_min} {time_hour} [{meridiem}] | {time_hour} <oclock> [{meridiem}] | {time_hour} {meridiem} | {time_hour} {time_minute} [{meridiem}])"
+  # NB: a bare "{time_hour} [{meridiem}]" is a valid time-of-day (e.g. "for 6" ->
+  # 6 o'clock, nearest future). Durations always carry a unit word (min/sec/hr),
+  # so "for 6 minutes" still parses as a timer — the leftover "minutes" makes the
+  # bare-hour alt fail to match the whole sentence, and hassil takes the duration.
+  tod: "({named_time} | {past_min} {time_hour} [{meridiem}] | {to_min} {time_hour} [{meridiem}] | {time_hour} <oclock> [{meridiem}] | {time_hour} {time_minute} [{meridiem}] | {time_hour} [{meridiem}])"
   # interchangeable keyword (singular / plural)
   kw: "(timer | alarm | alert)"
   kws: "(timers | alarms | alerts | timers and alarms | alarms and timers | timers or alarms | alarms or timers | timers and alerts | alerts and timers | alarms and alerts)"

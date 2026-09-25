@@ -238,6 +238,12 @@ class Controller:
         return True
 
     async def cancel_all_timers(self, device_id: str | None) -> list[Timer]:
+        # Flush any active ring too (a fired alert is already out of _timers, so
+        # this must hit the ring engine directly, not just the scheduled ones).
+        if device_id:
+            await self.ring.stop(device_id)
+        else:
+            await self.ring.stop_all()
         victims = self.timers_for(device_id)
         for t in victims:
             await self.cancel_timer(t)
