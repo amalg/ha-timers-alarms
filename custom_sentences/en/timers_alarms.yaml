@@ -22,7 +22,7 @@ expansion_rules:
   # 6 o'clock, nearest future). Durations always carry a unit word (min/sec/hr),
   # so "for 6 minutes" still parses as a timer — the leftover "minutes" makes the
   # bare-hour alt fail to match the whole sentence, and hassil takes the duration.
-  tod: "({named_time} | {past_min} {time_hour} [{meridiem}] | {to_min} {time_hour} [{meridiem}] | {time_hour} <oclock> [{meridiem}] | {time_hour} {time_minute} [{meridiem}] | {time_hour} [{meridiem}])"
+  tod: "({named_time} | {past_min} {time_hour} [{meridiem}] | {to_min} {time_hour} [{meridiem}] | {time_hour} <oclock> [{meridiem}] | {time_hour}:{time_minute} [{meridiem}] | {time_hour} {time_minute} [{meridiem}] | {time_hour} [{meridiem}])"
   # interchangeable keyword (singular / plural)
   kw: "(timer | alarm | alert)"
   kws: "(timers | alarms | alerts | timers and alarms | alarms and timers | timers or alarms | alarms or timers | timers and alerts | alerts and timers | alarms and alerts)"
@@ -43,12 +43,13 @@ intents:
           - "<setv> [a | an | the] <dur> <kw>"
           - "<setv> [a | an | the] <kw> <dur>"
           - "[i want to] set [a | an] <dur> <kw>"
-      - sentences:  # TIME-OF-DAY -> one-shot alarm
-          - "<setv> [a | an | the | me a | myself a] <kw> (for | at) <tod>"
-          - "<setv> [a | an | the] <kw> (for | at) <tod>"
-          - "<setv> [a | an | the] <tod> <kw>"
-          - "<setv> [an | a] <kw> <tod>"
-          - "(wake me [up] | get me up) [at | by] <tod>"
+      - sentences:  # TIME-OF-DAY -> one-shot alarm. The time is a WILDCARD parsed
+          # in Python (util.parse_when), because the STT engine is out of our
+          # control and can emit any notation (7 p.m. / 7:00 / 700 / seven pm).
+          # Durations still parse as timers (parse_when detects unit words).
+          - "<setv> [a | an | the | me a | myself a] <kw> (for | at) {when}"
+          - "<setv> [a | an | the] <kw> {when}"
+          - "(wake me [up] | get me up) [at | by] {when}"
 
   HassTimerStatus:
     data:
@@ -92,6 +93,8 @@ intents:
           - "get rid of [(all | all my | all the | every | my | the)] <kws>"
 
 lists:
+  when:
+    wildcard: true
   hours:
     range: {from: 1, to: 24}
   minutes:
@@ -108,10 +111,14 @@ lists:
     values:
       - {in: "am", out: "am"}
       - {in: "a m", out: "am"}
+      - {in: "a.m.", out: "am"}
+      - {in: "a. m.", out: "am"}
       - {in: "in the morning", out: "am"}
       - {in: "this morning", out: "am"}
       - {in: "pm", out: "pm"}
       - {in: "p m", out: "pm"}
+      - {in: "p.m.", out: "pm"}
+      - {in: "p. m.", out: "pm"}
       - {in: "in the afternoon", out: "pm"}
       - {in: "this afternoon", out: "pm"}
       - {in: "in the evening", out: "pm"}

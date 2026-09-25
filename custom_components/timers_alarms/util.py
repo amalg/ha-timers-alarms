@@ -1,7 +1,15 @@
-"""Helpers: media_player resolution, duration + clock formatting, alarm times."""
+"""Helpers: media_player resolution, duration + clock formatting, alarm times.
+
+Time parsing (parse_when) is deliberately notation-agnostic: the speech-to-text
+engine is outside our control and, depending on the user's config, can emit a
+spoken time as "7 pm", "7 p.m.", "7:00", "7.00", "700", "seven pm", "1900", etc.
+So we capture the phrase as a wildcard in the sentences and parse it here in
+Python rather than trying to enumerate every notation in hassil templates.
+"""
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from homeassistant.core import HomeAssistant
@@ -126,3 +134,127 @@ def count_phrase(timers: int, alarms: int) -> str:
     if not parts:
         return "nothing"
     return " and ".join(parts)
+
+
+# ── notation-agnostic time/duration parsing (M3, for wildcard capture) ─────────
+_ONES = {
+    "zero": 0, "oh": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+    "seventeen": 17, "eighteen": 18, "nineteen": 19,
+}
+_TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50}
+_DUR_UNITS = (
+    (r"(\d+)\s*(?:hours?|hrs?|h)(?![a-z])", 3600),
+    (r"(\d+)\s*(?:minutes?|mins?)(?![a-z])", 60),
+    (r"(\d+)\s*(?:seconds?|secs?)(?![a-z])", 1),
+)
+
+
+def _words_to_digits(t: str) -> str:
+    """Turn spoken number words into digits: 'seven'->'7', 'twenty five'->'25',
+    'six oh five'->'6 0 5'. Leaves existing digits alone."""
+    # tens + ones first ("twenty five" -> 25)
+    for tw, tv in _TENS.items():
+        t = re.sub(
+            rf"\b{tw}[\s-]+(one|two|three|four|five|six|seven|eight|nine)\b",
+            lambda m: str(tv + _ONES[m.group(1)]),
+            t,
+        )
+        t = re.sub(rf"\b{tw}\b", str(tv), t)
+    for w, v in _ONES.items():
+        t = re.sub(rf"\b{w}\b", str(v), t)
+    return t
+
+
+def _parse_duration_text(t: str) -> int:
+    total, found = 0, False
+    for pat, mult in _DUR_UNITS:
+        for m in re.finditer(pat, t):
+            total += int(m.group(1)) * mult
+            found = True
+    if not found and re.search(r"\b(?:an?\s+)?half\s+(?:an\s+)?hour\b", t):
+        return 1800
+    return total if found else 0
+
+
+def _finish_tod(hour: int, minute: int, meridiem: str | None):
+    if hour > 23 or minute > 59:
+        return None
+    if meridiem == "pm":
+        return (hour if hour == 12 else (hour + 12) % 24, minute, False)
+    if meridiem == "am":
+        return (0 if hour == 12 else hour, minute, False)
+    if hour == 0 or hour > 12:
+        return (hour, minute, False)          # unambiguous 24-hour clock
+    return (hour, minute, True)               # ambiguous 12h -> nearest future
+
+
+def _parse_tod_text(raw: str):
+    """(hour, minute, ambiguous) for a time-of-day in any notation, else None."""
+    t = " " + raw.lower().strip() + " "
+    meridiem = None
+    # meridiem in any notation: pm, p.m., p. m., p m, 7pm (digit-attached);
+    # and worded times of day. Lookbehind (not a letter) so "spam"/"example"
+    # don't false-match, while "7pm" does.
+    if re.search(r"(?<![a-z])p\.?\s*\.?m\.?(?![a-z])", t) or re.search(
+        r"\b(afternoon|evening|tonight|noon|midday)\b", t
+    ) or re.search(r"\bnight\b", t):
+        meridiem = "pm"
+    elif re.search(r"(?<![a-z])a\.?\s*\.?m\.?(?![a-z])", t) or re.search(
+        r"\bmorning\b", t
+    ):
+        meridiem = "am"
+    # named times
+    if re.search(r"\b(noon|midday)\b", t):
+        return (12, 0, False)
+    if re.search(r"\bmidnight\b", t):
+        return (0, 0, False)
+    t = _words_to_digits(t)
+    # relative minutes
+    m = re.search(r"half\s+past\D*(\d{1,2})", t)
+    if m:
+        return _finish_tod(int(m.group(1)), 30, meridiem)
+    m = re.search(r"quarter\s+past\D*(\d{1,2})", t)
+    if m:
+        return _finish_tod(int(m.group(1)), 15, meridiem)
+    m = re.search(r"quarter\s+(?:to|til|till|until)\D*(\d{1,2})", t)
+    if m:
+        return _finish_tod((int(m.group(1)) - 1) % 24, 45, meridiem)
+    m = re.search(r"(\d{1,2})\D*(?:past|after)\D*(\d{1,2})", t)  # "20 past 6"
+    if m:
+        return _finish_tod(int(m.group(2)), int(m.group(1)), meridiem)
+    # any digit groups: "6.05"/"6:05" -> [6,05]; "610"/"1230" -> jammed; "6 0 5"
+    nums = re.findall(r"\d+", t)
+    if not nums:
+        return None
+    if len(nums) == 1:
+        v = nums[0]
+        if len(v) >= 3:                       # "610" -> 6:10, "1230" -> 12:30
+            hour, minute = int(v[:-2]), int(v[-2:])
+        else:
+            hour, minute = int(v), 0
+    else:
+        hour = int(nums[0])
+        rest = "".join(nums[1:])              # "0"+"5"->"05", "30"->"30"
+        minute = int(rest[:2])
+    return _finish_tod(hour, minute, meridiem)
+
+
+def parse_when(text: str):
+    """Classify a captured 'when' phrase.
+
+    Returns ('timer', total_seconds) for a duration, ('alarm', h, m, ambiguous)
+    for a time-of-day, or None. Duration wins when unit words are present, so
+    'for 5 minutes' is always a timer even though '5' alone would read as a time.
+    """
+    if not text:
+        return None
+    t = text.strip().lower()
+    secs = _parse_duration_text(t)
+    if secs > 0:
+        return ("timer", secs)
+    tod = _parse_tod_text(t)
+    if tod is not None:
+        return ("alarm", *tod)
+    return None

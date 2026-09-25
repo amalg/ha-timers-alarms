@@ -24,6 +24,7 @@ from .util import (
     apply_meridiem,
     count_phrase,
     next_occurrence,
+    parse_when,
     spoken_clock,
     spoken_duration,
     spoken_duration_adjective,
@@ -103,12 +104,22 @@ class StartTimerHandler(_Base):
         dev = intent_obj.device_id
         response = intent_obj.create_response()
 
+        # Structured slots first (fast path for the clean cases), then the
+        # free-form {when} wildcard parsed in Python — so ANY STT notation for a
+        # time-of-day works (7 p.m. / 7:00 / 700 / seven pm / …).
         clock = _parse_clock(s)
+        total = _duration(s)
+        if clock is None and total == 0:
+            parsed = parse_when(_val(s, "when", "") or "")
+            if parsed and parsed[0] == "timer":
+                total = parsed[1]
+            elif parsed:
+                clock = (parsed[1], parsed[2], parsed[3])
+
         if clock is not None:
             hour, minute, ambiguous = clock
             target = next_occurrence(hour, minute, ambiguous)
-            total = int(round((target - dt_util.now()).total_seconds()))
-            total = max(1, total)
+            total = max(1, int(round((target - dt_util.now()).total_seconds())))
             label = spoken_clock(target)
             await self.controller.create_timer(
                 dev, total, kind="alarm", label_time=label
@@ -116,7 +127,6 @@ class StartTimerHandler(_Base):
             response.async_set_speech(f"Alarm set for {label}.")
             return response
 
-        total = _duration(s)
         if total > 0:
             await self.controller.create_timer(dev, total, kind="timer")
             response.async_set_speech(f"Timer set for {spoken_duration(total)}.")

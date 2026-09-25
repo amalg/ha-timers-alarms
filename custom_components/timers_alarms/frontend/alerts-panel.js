@@ -78,20 +78,26 @@ class TaAlertsPanel extends HTMLElement {
   _render() {
     const now = Date.now() / 1000;
     const rows = this._items
-      .map(
-        (i) => `
-        <div class="row">
-          <div class="icon">${ICONS[i.kind] || "⏲"}</div>
+      .map((i) => {
+        const alerting = i.status === "alerting";
+        const right = alerting
+          ? `<div class="remaining alerting">🔔 Alerting</div>`
+          : `<div class="remaining" data-fires="${i.fires_at}">${fmtRemaining(
+              i.fires_at - now
+            )}</div>`;
+        return `
+        <div class="row${alerting ? " is-alerting" : ""}">
+          <div class="icon">${alerting ? "🔔" : ICONS[i.kind] || "⏲"}</div>
           <div class="meta">
             <div class="label">${i.label}</div>
             <div class="target">rings on ${i.target || "?"}</div>
           </div>
-          <div class="remaining" data-fires="${i.fires_at}">${fmtRemaining(
-          i.fires_at - now
-        )}</div>
-          <button class="cancel" data-id="${i.id}" title="Cancel">✕</button>
-        </div>`
-      )
+          ${right}
+          <button class="cancel" data-id="${i.id}" title="${
+          alerting ? "Dismiss" : "Cancel"
+        }">✕</button>
+        </div>`;
+      })
       .join("");
 
     this.shadowRoot.innerHTML = `
@@ -115,6 +121,10 @@ class TaAlertsPanel extends HTMLElement {
         .target { font-size: 12px; color: var(--secondary-text-color); }
         .remaining { font-variant-numeric: tabular-nums; font-size: 20px;
                      font-weight: 500; color: var(--primary-color); }
+        .remaining.alerting { color: var(--error-color, #db4437); font-size: 16px;
+                              animation: ta-pulse 1s ease-in-out infinite; }
+        .row.is-alerting { background: rgba(219,68,55,.08); border-radius: 8px; }
+        @keyframes ta-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
         button.cancel { border: none; background: transparent; cursor: pointer;
                         font-size: 18px; color: var(--secondary-text-color);
                         border-radius: 50%; width: 32px; height: 32px; }

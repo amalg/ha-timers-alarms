@@ -46,6 +46,10 @@ class Controller:
         self.ring = RingEngine(hass)
         self._timers: dict[str, Timer] = {}
         self._cancels: dict[str, Callable[[], None]] = {}  # timer_id -> unschedule
+        # Alerts that have FIRED and are currently ringing — kept visible on the
+        # dashboard (status "alerting") until dismissed or the ring self-caps.
+        self._ringing: dict[str, Timer] = {}
+        self._ring_cleanup: dict[str, Callable[[], None]] = {}  # id -> cancel
 
     # ── options ──────────────────────────────────────────────────────────────
     def _opt(self, key: str):
@@ -78,6 +82,10 @@ class Controller:
         for cancel in list(self._cancels.values()):
             cancel()
         self._cancels.clear()
+        for cancel in list(self._ring_cleanup.values()):
+            cancel()
+        self._ring_cleanup.clear()
+        self._ringing.clear()
         await self.ring.stop_all()
 
     async def _persist(self) -> None:
@@ -95,8 +103,7 @@ class Controller:
         Each item carries where it will ring (target device + media_player) and
         an absolute fires_at (epoch seconds) so the panel can tick down locally.
         """
-        items: list[dict] = []
-        for t in sorted(self._timers.values(), key=lambda t: t.expires_at):
+        def entry(t: Timer, ringing: bool) -> dict:
             target = device_name(self.hass, t.device_id)
             if target == "this device" and t.media_player:
                 st = self.hass.states.get(t.media_player)
@@ -105,19 +112,22 @@ class Controller:
                 label = f"{t.label_time} alarm" if t.label_time else "alarm"
             else:
                 label = f"{spoken_duration_adjective(t.total_seconds)} timer"
-            items.append(
-                {
-                    "id": t.id,
-                    "kind": t.kind,
-                    "label": label,
-                    "target": target,
-                    "target_media_player": t.media_player,
-                    "fires_at": t.expires_at,
-                    "duration_s": t.total_seconds,
-                    "remaining_s": t.remaining(),
-                    "created": t.created_at,
-                }
-            )
+            return {
+                "id": t.id,
+                "kind": t.kind,
+                "status": "alerting" if ringing else "counting",
+                "label": label,
+                "target": target,
+                "target_media_player": t.media_player,
+                "fires_at": t.expires_at,
+                "duration_s": t.total_seconds,
+                "remaining_s": 0 if ringing else t.remaining(),
+                "created": t.created_at,
+            }
+
+        # Ringing alerts float to the top, then the counting ones (soonest first).
+        items = [entry(t, True) for t in sorted(self._ringing.values(), key=lambda t: t.expires_at)]
+        items += [entry(t, False) for t in sorted(self._timers.values(), key=lambda t: t.expires_at)]
         return items
 
     # ── timers ───────────────────────────────────────────────────────────────
@@ -160,18 +170,34 @@ class Controller:
         if timer is None:
             return
         await self._persist()
-        self._notify()
         if not timer.media_player:
             _LOGGER.warning(
                 "Timer %s expired but no media_player for device %s (set a fallback)",
                 timer_id,
                 timer.device_id,
             )
+            self._notify()
             return
+        # Keep it visible as "alerting" while it rings; auto-clear just after the
+        # ring's own safety cap in case nobody dismisses it.
+        self._ringing[timer.id] = timer
         url, duration = self._tone(timer.kind)
         await self.ring.start(
             timer.device_id, timer.media_player, url, duration, self._max_ring
         )
+        self._ring_cleanup[timer.id] = async_call_later(
+            self.hass, self._max_ring + 2, lambda _now: self._end_ring(timer.id)
+        )
+        self._notify()
+
+    def _end_ring(self, alert_id: str) -> None:
+        """Drop a ringing alert from the dashboard (dismissed or self-capped)."""
+        existed = self._ringing.pop(alert_id, None) is not None
+        cancel = self._ring_cleanup.pop(alert_id, None)
+        if cancel:
+            cancel()
+        if existed:
+            self._notify()
 
     def timers_for(self, device_id: str | None) -> list[Timer]:
         items = list(self._timers.values())
@@ -227,27 +253,37 @@ class Controller:
         self._notify()
 
     async def cancel_by_id(self, alert_id: str) -> bool:
-        """Cancel one alert by id (used by the dashboard/service). Also flushes
-        its ring if it happens to be sounding on its device."""
-        timer = self._timers.get(alert_id)
+        """Cancel one alert by id (used by the dashboard/service). Works whether
+        it's still counting down or currently ringing (flushes the ring)."""
+        timer = self._timers.get(alert_id) or self._ringing.get(alert_id)
         if timer is None:
             return False
         if timer.device_id:
             await self.ring.stop(timer.device_id)
-        await self.cancel_timer(timer)
+        if alert_id in self._ringing:
+            self._end_ring(alert_id)
+        else:
+            await self.cancel_timer(timer)
         return True
 
     async def cancel_all_timers(self, device_id: str | None) -> list[Timer]:
-        # Flush any active ring too (a fired alert is already out of _timers, so
-        # this must hit the ring engine directly, not just the scheduled ones).
+        # Flush any active ring too (a fired alert is out of _timers and in
+        # _ringing), then cancel the scheduled ones.
         if device_id:
             await self.ring.stop(device_id)
         else:
             await self.ring.stop_all()
+        ringing = [t for t in list(self._ringing.values()) if not device_id or t.device_id == device_id]
+        for t in ringing:
+            self._end_ring(t.id)
         victims = self.timers_for(device_id)
         for t in victims:
             await self.cancel_timer(t)
-        return victims
+        return victims + ringing
 
     async def stop_ring(self, device_id: str) -> bool:
-        return await self.ring.stop(device_id)
+        """Silence a ringing alert on a device (voice 'stop'/'cancel')."""
+        was = await self.ring.stop(device_id)
+        for tid in [t.id for t in list(self._ringing.values()) if t.device_id == device_id]:
+            self._end_ring(tid)
+        return was

@@ -54,7 +54,7 @@ PANEL_WEBCOMPONENT = "ta-alerts-panel"
 PANEL_TITLE = "Alerts"
 PANEL_ICON = "mdi:bell-ring"
 # Bumped when the panel JS changes so the browser re-fetches it.
-PANEL_JS_VERSION = "1"
+PANEL_JS_VERSION = "2"
 
 # Whether the Alerts panel is shown in the sidebar (switch state restored across
 # restarts; defaults on). Kept in hass.data, not options, so a toggle needn't
