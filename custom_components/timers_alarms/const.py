@@ -21,17 +21,21 @@ CONF_MAX_RING_SECONDS = "max_ring_seconds"
 DEFAULTS = {
     CONF_ENABLE_TIMERS: True,
     CONF_ENABLE_ALARMS: True,
-    CONF_TIMER_TONE: "default",
-    CONF_ALARM_TONE: "default",
+    CONF_TIMER_TONE: "simple_timer",
+    CONF_ALARM_TONE: "simple_alarm",
     CONF_FALLBACK_MEDIA_PLAYER: None,  # used only when the source device has no media_player
     CONF_RING_VOLUME: None,            # None = leave the device's current volume
     CONF_MAX_RING_SECONDS: 120,        # safety cap on a ring nobody dismisses
 }
 
 # Tone library. id -> (label, filename under tones/, duration_seconds).
-# "default" must always exist and should be a CC-licensed sound (resale hygiene).
-# The full Alexa library is bundled in M4; for M1 we ship the CC default only.
+# Defaults are the Amazon Alexa "Simple Timer" / "Simple Alarm" sounds (Amal's
+# household devices — see tones/LICENSE.md re: not shipping these on resale
+# units). "default" is the CC-BY HA Voice PE sound, kept as a clean fallback.
+# The rest of the Alexa audition set lands as selectable options in M4.
 TONES: dict[str, tuple[str, str, float]] = {
+    "simple_timer": ("Simple Timer (Alexa)", "simple_timer.mp3", 6.0),
+    "simple_alarm": ("Simple Alarm (Alexa)", "simple_alarm.mp3", 6.0),
     "default": ("Default (CC)", "default.flac", 2.7),
 }
 

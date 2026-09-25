@@ -28,7 +28,12 @@ from .const import (
 from .models import Timer
 from .ring import RingEngine
 from .store import StateStore
-from .util import device_name, resolve_media_player, spoken_duration_adjective
+from .util import (
+    clock_hm_from_epoch,
+    device_name,
+    resolve_media_player,
+    spoken_duration_adjective,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,11 +101,15 @@ class Controller:
             if target == "this device" and t.media_player:
                 st = self.hass.states.get(t.media_player)
                 target = (st.name if st else None) or t.media_player
+            if t.kind == "alarm":
+                label = f"{t.label_time} alarm" if t.label_time else "alarm"
+            else:
+                label = f"{spoken_duration_adjective(t.total_seconds)} timer"
             items.append(
                 {
                     "id": t.id,
-                    "kind": "timer",  # M3 adds "alarm"
-                    "label": f"{spoken_duration_adjective(t.total_seconds)} timer",
+                    "kind": t.kind,
+                    "label": label,
                     "target": target,
                     "target_media_player": t.media_player,
                     "fires_at": t.expires_at,
@@ -113,7 +122,12 @@ class Controller:
 
     # ── timers ───────────────────────────────────────────────────────────────
     async def create_timer(
-        self, device_id: str | None, total_seconds: int, name: str = ""
+        self,
+        device_id: str | None,
+        total_seconds: int,
+        name: str = "",
+        kind: str = "timer",
+        label_time: str = "",
     ) -> Timer:
         mp = resolve_media_player(
             self.hass, device_id, self._opt(CONF_FALLBACK_MEDIA_PLAYER)
@@ -123,6 +137,8 @@ class Controller:
             media_player=mp,
             total_seconds=int(total_seconds),
             name=name.strip(),
+            kind=kind,
+            label_time=label_time,
         )
         self._timers[timer.id] = timer
         self._schedule(timer)
@@ -152,7 +168,7 @@ class Controller:
                 timer.device_id,
             )
             return
-        url, duration = self._tone("timer")
+        url, duration = self._tone(timer.kind)
         await self.ring.start(
             timer.device_id, timer.media_player, url, duration, self._max_ring
         )
@@ -178,7 +194,22 @@ class Controller:
         self, device_id: str | None, total_seconds: int
     ) -> Timer | None:
         for t in self.scoped_timers(device_id):
-            if t.total_seconds == total_seconds:
+            if t.kind == "timer" and t.total_seconds == total_seconds:
+                return t
+        return None
+
+    def find_by_time(
+        self, device_id: str | None, hour: int, minute: int, ambiguous: bool
+    ) -> Timer | None:
+        """Find an alarm firing at the given clock time ('the 3 PM alarm'). When
+        the hour was given without am/pm we match on the 12-hour position."""
+        for t in self.scoped_timers(device_id):
+            if t.kind != "alarm":
+                continue
+            h, m = clock_hm_from_epoch(t.expires_at)
+            if m != minute:
+                continue
+            if h == hour or (ambiguous and h % 12 == hour % 12):
                 return t
         return None
 
@@ -206,11 +237,11 @@ class Controller:
         await self.cancel_timer(timer)
         return True
 
-    async def cancel_all_timers(self, device_id: str | None) -> int:
+    async def cancel_all_timers(self, device_id: str | None) -> list[Timer]:
         victims = self.timers_for(device_id)
         for t in victims:
             await self.cancel_timer(t)
-        return len(victims)
+        return victims
 
     async def stop_ring(self, device_id: str) -> bool:
         return await self.ring.stop(device_id)

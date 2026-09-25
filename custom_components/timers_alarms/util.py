@@ -1,9 +1,12 @@
-"""Helpers: resolving the source device's media_player, duration formatting."""
+"""Helpers: media_player resolution, duration + clock formatting, alarm times."""
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util import dt as dt_util
 
 
 def resolve_media_player(
@@ -65,3 +68,61 @@ def spoken_duration_adjective(total_seconds: int) -> str:
         n, u = nonzero[0]
         return f"{n} {u}"
     return spoken_duration(total_seconds)
+
+
+# ── time-of-day / alarms (M3) ─────────────────────────────────────────────────
+def apply_meridiem(hour: int, meridiem: str | None) -> int:
+    """Fold a 12-hour clock + am/pm into a 0–23 hour."""
+    if meridiem == "am":
+        return 0 if hour == 12 else hour
+    if meridiem == "pm":
+        return hour if hour == 12 else (hour + 12) % 24
+    return hour
+
+
+def next_occurrence(hour: int, minute: int, ambiguous: bool) -> datetime:
+    """The next local datetime matching hour:minute (one-shot alarm target).
+
+    `ambiguous` means a 12-hour hour was given with no am/pm — we pick whichever
+    of the two daily occurrences (H or H+12) comes soonest, like a phone alarm.
+    """
+    now = dt_util.now()
+
+    def at(h: int) -> datetime:
+        t = now.replace(hour=h % 24, minute=minute, second=0, microsecond=0)
+        if t <= now:
+            t += timedelta(days=1)
+        return t
+
+    if ambiguous:
+        return min(at(hour), at(hour + 12))
+    return at(hour)
+
+
+def spoken_clock(dt: datetime) -> str:
+    """'3 PM', '3:15 PM', '7:05 AM' — friendly for TTS and the dashboard."""
+    h = dt.hour % 12 or 12
+    mer = "AM" if dt.hour < 12 else "PM"
+    return f"{h} {mer}" if dt.minute == 0 else f"{h}:{dt.minute:02d} {mer}"
+
+
+def spoken_clock_from_epoch(epoch: float) -> str:
+    return spoken_clock(dt_util.as_local(dt_util.utc_from_timestamp(epoch)))
+
+
+def clock_hm_from_epoch(epoch: float) -> tuple[int, int]:
+    """(hour, minute) in HA-local time for an alarm's fire time."""
+    dt = dt_util.as_local(dt_util.utc_from_timestamp(epoch))
+    return dt.hour, dt.minute
+
+
+def count_phrase(timers: int, alarms: int) -> str:
+    """'2 timers', '1 alarm', '2 timers and 1 alarm', 'nothing'."""
+    parts = []
+    if timers:
+        parts.append(f"{timers} timer{'s' if timers != 1 else ''}")
+    if alarms:
+        parts.append(f"{alarms} alarm{'s' if alarms != 1 else ''}")
+    if not parts:
+        return "nothing"
+    return " and ".join(parts)

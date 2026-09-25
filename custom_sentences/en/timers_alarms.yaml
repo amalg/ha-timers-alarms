@@ -1,53 +1,68 @@
 language: en
-# Broad phrasing coverage for HA's classic (no-LLM) hassil matcher. Uses
-# expansion_rules + (a|b) alternatives + [optional] to generate a very large
-# effective sentence set from compact definitions. Mapped to HA's built-in timer
-# intent NAMES, which our integration OVERRIDES (intents.py) so everything hits
-# OUR store/ring/tones. No free-text names (per design) — reference timers by
-# index/ordinal/duration. Device-exact via intent_obj.device_id.
+# Broad phrasing coverage for HA's classic (no-LLM) hassil matcher. Mapped to
+# HA's built-in timer intent NAMES, which our integration OVERRIDES (intents.py)
+# so everything hits OUR store/ring/tones. Device-exact via intent_obj.device_id.
+#
+# M3: timer / alarm / alert are INTERCHANGEABLE keywords — the handler decides
+# timer vs alarm from the KIND OF TIME. A duration ("for 20 minutes") -> timer;
+# a time-of-day ("for 3 pm", "at 7:30", "half past 6") -> one-shot alarm. No
+# free-text names (STT-misfire hygiene) — reference by number / ordinal /
+# duration / alarm time.
 
 expansion_rules:
   # units: singular / plural / abbreviations
   min: "(minute | minutes | minute's | min | mins)"
   sec: "(second | seconds | second's | sec | secs)"
   hr: "(hour | hours | hour's | hr | hrs)"
-  # a duration expression, filling {hours}/{minutes}/{seconds}
+  # a DURATION expression -> fills {hours}/{minutes}/{seconds}
   dur: "({hours} <hr> [and] {minutes} <min> | {hours} <hr> | {minutes} <min> [and] {seconds} <sec> | {minutes} <min> | {seconds} <sec>)"
+  # a TIME-OF-DAY expression -> fills {time_hour}/{time_minute}/{meridiem}/{named_time}/{past_min}/{to_min}
+  oclock: "(o'clock | oclock | o clock)"
+  tod: "({named_time} | {past_min} {time_hour} [{meridiem}] | {to_min} {time_hour} [{meridiem}] | {time_hour} <oclock> [{meridiem}] | {time_hour} {meridiem} | {time_hour} {time_minute} [{meridiem}])"
+  # interchangeable keyword (singular / plural)
+  kw: "(timer | alarm | alert)"
+  kws: "(timers | alarms | alerts | timers and alarms | alarms and timers | timers or alarms | alarms or timers | timers and alerts | alerts and timers | alarms and alerts)"
   # verbs
-  setv: "(set | start | create | make | begin | add | put on | give me | set me | start me | i want | i'd like | i need | can you set | could you set | can you start | please set | please start | put)"
+  setv: "(set | start | create | make | begin | add | put on | give me | set me | start me | wake me [up] | i want | i'd like | i need | can you set | could you set | can you start | please set | please start | put)"
   canv: "(cancel | stop | delete | remove | kill | end | abort | scrap | clear | get rid of | turn off | shut off)"
   askv: "(what | which | list | show me | show | tell me | tell me about | read me | read | check | how many | do i have | are there | is there | are there any | got any)"
-  # 'the timer' (singular)
-  thetimer: "[the | my | that | a] timer"
-  # a specific timer reference (index / ordinal / duration)
-  ref: "(timer {index} | [the] {ordinal} timer | [the | my] <dur> timer)"
+  # 'the timer/alarm' (singular)
+  thealert: "[the | my | that | a] <kw>"
+  # a specific reference (number / ordinal / duration / alarm time)
+  ref: "(<kw> {index} | number {index} | [the] {ordinal} [<kw>] | [the | my] <dur> <kw> | [the | my] <tod> <kw> | [the | my] <kw> (for | at) <tod>)"
 
 intents:
   HassStartTimer:
     data:
-      - sentences:
-          - "<setv> [a | an | the | me a | myself a] timer for <dur>"
-          - "<setv> [a | an | the] <dur> timer"
-          - "<setv> [a | an | the] timer <dur>"
-          - "[i want to] set [a | an] <dur> timer"
+      - sentences:  # DURATION -> timer
+          - "<setv> [a | an | the | me a | myself a] <kw> for <dur>"
+          - "<setv> [a | an | the] <dur> <kw>"
+          - "<setv> [a | an | the] <kw> <dur>"
+          - "[i want to] set [a | an] <dur> <kw>"
+      - sentences:  # TIME-OF-DAY -> one-shot alarm
+          - "<setv> [a | an | the | me a | myself a] <kw> (for | at) <tod>"
+          - "<setv> [a | an | the] <kw> (for | at) <tod>"
+          - "<setv> [a | an | the] <tod> <kw>"
+          - "<setv> [an | a] <kw> <tod>"
+          - "(wake me [up] | get me up) [at | by] <tod>"
 
   HassTimerStatus:
     data:
       - sentences:  # list / enumerate everything
-          - "<askv> [(my | all | all my | the | any)] timers [(there | running | set | going | active | left | on | up | do i have | do i have running | have i got | are mine)]"
-          - "<askv> timers are (there | running | set | going | active | left | up)"
-          - "(what | which) timers (do i have | have i got | are mine) [(running | set | going | left)]"
-          - "how many timers [(are there | are running | are set | are going | do i have | have i got)]"
-          - "any timers [(running | going | set | left)]"
-          - "[what is | what's] [my | the] timer status"
-          - "(check | how are | what about) [my | the] timers"
-          - "what's (on | left on | going on with) [my | the] timers"
-      - sentences:  # time-left, general (the word "timer" is optional)
-          - "how (much | much time | long | much longer | much time is | long is) [is] [left | remaining | to go | until it goes off] [[on] <thetimer>]"
-          - "how much [time] [is] [left | remaining] [[on] <thetimer>]"
-          - "(time | time left | time remaining | how long) [left | remaining] [[on] <thetimer>]"
-          - "when (is | does | will) [<thetimer> | it] (go off | done | up | finish | end | be done | be up)"
-      - sentences:  # time-left, a specific timer
+          - "<askv> [(my | all | all my | the | any)] <kws> [(there | running | set | going | active | left | on | up | do i have | do i have running | have i got | are mine)]"
+          - "<askv> <kws> are (there | running | set | going | active | left | up)"
+          - "(what | which) <kws> (do i have | have i got | are mine) [(running | set | going | left)]"
+          - "how many <kws> [(are there | are running | are set | are going | do i have | have i got)]"
+          - "any <kws> [(running | going | set | left)]"
+          - "[what is | what's] [my | the] (timer | alarm | alert) status"
+          - "(check | how are | what about) [my | the] <kws>"
+          - "what's (on | left on | going on with) [my | the] <kws>"
+      - sentences:  # time-left, general (the keyword is optional)
+          - "how (much | much time | long | much longer | much time is | long is) [is] [left | remaining | to go | until it goes off] [[on] <thealert>]"
+          - "how much [time] [is] [left | remaining] [[on] <thealert>]"
+          - "(time | time left | time remaining | how long) [left | remaining] [[on] <thealert>]"
+          - "when (is | does | will) [<thealert> | it] (go off | done | up | finish | end | be done | be up)"
+      - sentences:  # a specific one
           - "how (much | much time | long | much longer) [is] [left | remaining | to go] [on] <ref>"
           - "when (is | does | will) <ref> (go off | done | up | finish | end | be done)"
 
@@ -55,22 +70,22 @@ intents:
     data:
       - sentences:  # bare dismissal (safe: no built-in bare-stop/cancel)
           - "(stop | cancel | nevermind | never mind | dismiss | forget it | knock it off)"
-      - sentences:  # the (single) timer
-          - "<canv> <thetimer>"
-          - "<canv> [the | my] (running | current | active) timer"
-      - sentences:  # a specific timer
+      - sentences:  # the (single) timer/alarm
+          - "<canv> <thealert>"
+          - "<canv> [the | my] (running | current | active) <kw>"
+      - sentences:  # a specific one
           - "<canv> <ref>"
 
-  # Plural "timers" (even with just one set) => cancel all. Quantifier optional,
-  # so "cancel timers" / "stop timers" / "cancel my timers" / "clear the timers"
-  # all match; singular "cancel timer" stays with CancelTimer (the single one).
+  # Plural (even with just one set) => cancel all. Quantifier optional, so
+  # "cancel alarms" / "stop timers" / "clear the alerts" all match; singular
+  # "cancel timer/alarm" stays with CancelTimer (the single one).
   HassCancelAllTimers:
     data:
       - sentences:
-          - "<canv> [(all | all the | all my | all of the | all of my | every | each | my | the)] timers"
+          - "<canv> [(all | all the | all my | all of the | all of my | every | each | my | the)] <kws>"
           - "(cancel | clear | delete | remove | stop | wipe | reset) everything"
-          - "(clear | reset | wipe | kill) [all] [of] [my | the] timers"
-          - "get rid of [(all | all my | all the | every | my | the)] timers"
+          - "(clear | reset | wipe | kill) [all] [of] [my | the] <kws>"
+          - "get rid of [(all | all my | all the | every | my | the)] <kws>"
 
 lists:
   hours:
@@ -81,6 +96,38 @@ lists:
     range: {from: 1, to: 600}
   index:
     range: {from: 1, to: 50}
+  time_hour:
+    range: {from: 0, to: 23}
+  time_minute:
+    range: {from: 0, to: 59}
+  meridiem:
+    values:
+      - {in: "am", out: "am"}
+      - {in: "a m", out: "am"}
+      - {in: "in the morning", out: "am"}
+      - {in: "this morning", out: "am"}
+      - {in: "pm", out: "pm"}
+      - {in: "p m", out: "pm"}
+      - {in: "in the afternoon", out: "pm"}
+      - {in: "this afternoon", out: "pm"}
+      - {in: "in the evening", out: "pm"}
+      - {in: "this evening", out: "pm"}
+      - {in: "tonight", out: "pm"}
+      - {in: "at night", out: "pm"}
+  named_time:
+    values:
+      - {in: "noon", out: "12:00"}
+      - {in: "midday", out: "12:00"}
+      - {in: "midnight", out: "00:00"}
+  past_min:
+    values:
+      - {in: "half past", out: 30}
+      - {in: "quarter past", out: 15}
+  to_min:
+    values:
+      - {in: "quarter to", out: 45}
+      - {in: "quarter til", out: 45}
+      - {in: "quarter until", out: 45}
   ordinal:
     values:
       - {in: "first", out: 1}
@@ -95,3 +142,11 @@ lists:
       - {in: "5th", out: 5}
       - {in: "sixth", out: 6}
       - {in: "6th", out: 6}
+      - {in: "seventh", out: 7}
+      - {in: "7th", out: 7}
+      - {in: "eighth", out: 8}
+      - {in: "8th", out: 8}
+      - {in: "ninth", out: 9}
+      - {in: "9th", out: 9}
+      - {in: "tenth", out: 10}
+      - {in: "10th", out: 10}
