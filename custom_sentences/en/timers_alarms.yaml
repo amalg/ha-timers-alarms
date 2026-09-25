@@ -78,14 +78,16 @@ intents:
           - "how much [time] [is] [left | remaining] [[on] <thealert>]"
           - "(time | time left | time remaining | how long) [left | remaining] [[on] <thealert>]"
           - "when (is | does | will) [<thealert> | it] (go off | done | up | finish | end | be done | be up)"
+          - "[<lead>] what time (is | are | does) [(it | they | the | my | the alarm | the timer | my alarm | my timer)] (set | set for | go off | going off | due)"
       - sentences:  # a specific one
           - "how (much | much time | long | much longer) [is] [left | remaining | to go] [on] <ref>"
           - "when (is | does | will) <ref> (go off | done | up | finish | end | be done)"
 
   HassCancelTimer:
     data:
-      - sentences:  # bare dismissal (safe: no built-in bare-stop/cancel)
-          - "(stop | cancel | nevermind | never mind | dismiss | forget it | knock it off)"
+      - sentences:  # dismissal — tolerant of STT noise/filler while a ring blares
+          # (barge-in over the alert often mis-captures a leading word: "No. Stop.")
+          - "[(no | nope | okay | ok | yeah | yes | um | uh | oh | ah | hey | well | please | alright | just | i said | now | ugh | god)] (stop | stop it | stop that | stop the timer | stop the alarm | cancel | cancel it | cancel that | nevermind | never mind | dismiss | dismiss it | shut up | be quiet | enough | that's enough | make it stop | knock it off | turn it off | shut it off) [(please | now | already | it | the timer | the alarm)]"
       - sentences:  # the (single) timer/alarm
           - "<canv> <thealert>"
           - "<canv> [the | my] (running | current | active) <kw>"
