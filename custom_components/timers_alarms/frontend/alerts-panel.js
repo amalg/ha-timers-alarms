@@ -31,9 +31,10 @@ class TaAlertsPanel extends HTMLElement {
     this._hass = hass;
     const sensor = this._findSensor(hass);
     this._items = (sensor && sensor.attributes.items) || [];
-    // Only rebuild the DOM when the SET of alerts changes; otherwise just let
-    // the 1 Hz ticker refresh the countdowns (keeps cancel buttons clickable).
-    const key = this._items.map((i) => i.id).join(",");
+    // Rebuild the DOM when the set of alerts OR any status changes (so a timer
+    // flipping to "alerting" on fire re-renders); otherwise let the 1 Hz ticker
+    // refresh the countdowns (keeps cancel buttons clickable).
+    const key = this._items.map((i) => i.id + ":" + i.status).join(",");
     if (key !== this._lastKey) {
       this._lastKey = key;
       this._render();

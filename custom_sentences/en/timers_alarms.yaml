@@ -62,6 +62,10 @@ intents:
           - "[what is | what's] [my | the] (timer | alarm | alert) status"
           - "(check | how are | what about) [my | the] <kws>"
           - "what's (on | left on | going on with) [my | the] <kws>"
+      - sentences:  # STT often drops the leading "what/which" -> "timers are set"
+          - "[(my | all | all my | the | any | are there | are there any | do i have any | got any)] <kws> [are] (set | running | going | active | left | on | up | there | left to go)"
+          - "<kws> [that] [are] (set | running | going | active | left | on | up)"
+          - "(any | are there | are there any | do i have any | have i got any) <kws>"
       - sentences:  # time-left, general (the keyword is optional)
           - "how (much | much time | long | much longer | much time is | long is) [is] [left | remaining | to go | until it goes off] [[on] <thealert>]"
           - "how much [time] [is] [left | remaining] [[on] <thealert>]"

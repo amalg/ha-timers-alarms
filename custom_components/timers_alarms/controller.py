@@ -206,11 +206,11 @@ class Controller:
         return sorted(items, key=lambda t: t.expires_at)
 
     def scoped_timers(self, device_id: str | None) -> list[Timer]:
-        """Timers for cancel/list/reference: this device's, else all — ordered by
-        CREATION so ordinals ('timer 1', 'the first timer') are stable and match
-        the listing order."""
+        """Timers/alarms for cancel/list/reference: this device's, else all —
+        ordered SOONEST-TO-FIRE so index 1 ('timer 1', 'the first one') is always
+        the next alert to go off, matching the dashboard and the spoken list."""
         items = self.timers_for(device_id) or self.timers_for(None)
-        return sorted(items, key=lambda t: t.created_at)
+        return sorted(items, key=lambda t: t.expires_at)
 
     def find_by_index(self, device_id: str | None, index: int) -> Timer | None:
         ts = self.scoped_timers(device_id)
