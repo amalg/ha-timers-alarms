@@ -30,6 +30,8 @@ expansion_rules:
   setv: "(set | start | create | make | begin | add | put on | give me | set me | start me | wake me [up] | i want | i'd like | i need | can you set | could you set | can you start | please set | please start | put)"
   canv: "(cancel | stop | delete | remove | kill | end | abort | scrap | clear | get rid of | turn off | shut off)"
   askv: "(what | which | list | show me | show | tell me | tell me about | read me | read | check | how many | do i have | are there | is there | are there any | got any)"
+  # STT prepends conversational filler ("Let's see what timers…"); swallow it.
+  lead: "[(let's see | let me see | lets see | let's check | ok | okay | alright | so | um | uh | well | hey | hi | now | please | yeah | and)]"
   # 'the timer/alarm' (singular)
   thealert: "[the | my | that | a] <kw>"
   # a specific reference (number / ordinal / duration / alarm time)
@@ -66,6 +68,11 @@ intents:
           - "[(my | all | all my | the | any | are there | are there any | do i have any | got any)] <kws> [are] (set | running | going | active | left | on | up | there | left to go)"
           - "<kws> [that] [are] (set | running | going | active | left | on | up)"
           - "(any | are there | are there any | do i have any | have i got any) <kws>"
+      - sentences:  # with leading STT filler ("let's see what timers are set")
+          - "<lead> <askv> [(my | all | all my | the | any)] <kws> [(set | running | going | active | left | there | up | on | do i have)]"
+          - "<lead> <kws> [are] (set | running | going | active | left | up | there)"
+          - "<lead> (what | which) <kws> [(are | do i have | i have)] [(set | running | going | left)]"
+          - "<lead> how many <kws> [(are set | are running | do i have)]"
       - sentences:  # time-left, general (the keyword is optional)
           - "how (much | much time | long | much longer | much time is | long is) [is] [left | remaining | to go | until it goes off] [[on] <thealert>]"
           - "how much [time] [is] [left | remaining] [[on] <thealert>]"

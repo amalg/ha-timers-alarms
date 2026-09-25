@@ -29,11 +29,43 @@ class TaAlertsPanel extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    const sensor = this._findSensor(hass);
-    this._items = (sensor && sensor.attributes.items) || [];
-    // Rebuild the DOM when the set of alerts OR any status changes (so a timer
-    // flipping to "alerting" on fire re-renders); otherwise let the 1 Hz ticker
-    // refresh the countdowns (keeps cancel buttons clickable).
+    // The companion app doesn't reliably push `hass` to a custom panel, so we
+    // don't depend on it: subscribe straight to the WS for live updates. Still
+    // sync from states here in case it does fire.
+    if (!this._subscribed) {
+      this._subscribed = true;
+      this._subscribe();
+    }
+    this._syncFromStates();
+  }
+
+  async _subscribe() {
+    if (!this._hass || !this._hass.connection) {
+      this._subscribed = false;
+      return;
+    }
+    try {
+      this._unsub = await this._hass.connection.subscribeEvents((ev) => {
+        const ns = ev && ev.data && ev.data.new_state;
+        if (ns && ns.attributes && ns.attributes.ta_marker) {
+          this._applyItems(ns.attributes.items || []);
+        }
+      }, "state_changed");
+    } catch (e) {
+      this._subscribed = false; // let a later hass retry
+    }
+  }
+
+  _syncFromStates() {
+    const sensor = this._findSensor(this._hass);
+    this._applyItems(sensor ? sensor.attributes.items || [] : []);
+  }
+
+  // Rebuild the DOM when the set of alerts OR any status changes (so a timer
+  // flipping to "alerting" on fire re-renders); otherwise the 1 Hz ticker just
+  // refreshes the countdowns (keeps cancel buttons clickable).
+  _applyItems(items) {
+    this._items = items || [];
     const key = this._items.map((i) => i.id + ":" + i.status).join(",");
     if (key !== this._lastKey) {
       this._lastKey = key;
@@ -48,6 +80,11 @@ class TaAlertsPanel extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this._ticker);
+    if (this._unsub) {
+      this._unsub();
+      this._unsub = null;
+    }
+    this._subscribed = false;
   }
 
   _findSensor(hass) {
