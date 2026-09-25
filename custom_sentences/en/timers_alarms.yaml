@@ -87,7 +87,7 @@ intents:
     data:
       - sentences:  # dismissal — tolerant of STT noise/filler while a ring blares
           # (barge-in over the alert often mis-captures a leading word: "No. Stop.")
-          - "[(no | nope | okay | ok | yeah | yes | um | uh | oh | ah | hey | well | please | alright | just | i said | now | ugh | god)] (stop | stop it | stop that | stop the timer | stop the alarm | cancel | cancel it | cancel that | nevermind | never mind | dismiss | dismiss it | shut up | be quiet | enough | that's enough | make it stop | knock it off | turn it off | shut it off) [(please | now | already | it | the timer | the alarm)]"
+          - "[(no | nope | okay | ok | yeah | yes | um | uh | oh | ah | hey | well | please | alright | just | i said | now | ugh | god)] (stop | stop it | stop that | stop the timer | stop the alarm | cancel | cancel it | cancel that | nevermind | never mind | dismiss | dismiss it | shut up | be quiet | quiet | enough | that's enough | make it stop | knock it off | silence it) [(please | now | already | it | the timer | the alarm)]"
       - sentences:  # the (single) timer/alarm
           - "<canv> <thealert>"
           - "<canv> [the | my] (running | current | active) <kw>"
