@@ -10,6 +10,7 @@ from collections.abc import Callable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.network import get_url
 
@@ -20,13 +21,14 @@ from .const import (
     CONF_RING_VOLUME,
     CONF_TIMER_TONE,
     DEFAULTS,
+    SIGNAL_ALERTS_UPDATED,
     STATIC_URL_PATH,
     TONES,
 )
 from .models import Timer
 from .ring import RingEngine
 from .store import StateStore
-from .util import resolve_media_player
+from .util import device_name, resolve_media_player, spoken_duration_adjective
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +67,7 @@ class Controller:
             # Timers that expired while HA was down are dropped in M1 (missed-ring
             # handling is M5).
         await self._persist()
+        self._notify()
 
     async def async_unload(self) -> None:
         for cancel in list(self._cancels.values()):
@@ -74,6 +77,39 @@ class Controller:
 
     async def _persist(self) -> None:
         await self.store.save_timers(list(self._timers.values()))
+
+    def _notify(self) -> None:
+        """Tell entities (the Alerts sensor) the active set changed."""
+        async_dispatcher_send(self.hass, SIGNAL_ALERTS_UPDATED)
+
+    # ── dashboard view ─────────────────────────────────────────────────────────
+    def active_items(self) -> list[dict]:
+        """A serializable snapshot of every active alert, soonest first — the
+        single source of truth the Alerts sensor and panel render from.
+
+        Each item carries where it will ring (target device + media_player) and
+        an absolute fires_at (epoch seconds) so the panel can tick down locally.
+        """
+        items: list[dict] = []
+        for t in sorted(self._timers.values(), key=lambda t: t.expires_at):
+            target = device_name(self.hass, t.device_id)
+            if target == "this device" and t.media_player:
+                st = self.hass.states.get(t.media_player)
+                target = (st.name if st else None) or t.media_player
+            items.append(
+                {
+                    "id": t.id,
+                    "kind": "timer",  # M3 adds "alarm"
+                    "label": f"{spoken_duration_adjective(t.total_seconds)} timer",
+                    "target": target,
+                    "target_media_player": t.media_player,
+                    "fires_at": t.expires_at,
+                    "duration_s": t.total_seconds,
+                    "remaining_s": t.remaining(),
+                    "created": t.created_at,
+                }
+            )
+        return items
 
     # ── timers ───────────────────────────────────────────────────────────────
     async def create_timer(
@@ -91,6 +127,7 @@ class Controller:
         self._timers[timer.id] = timer
         self._schedule(timer)
         await self._persist()
+        self._notify()
         return timer
 
     def _schedule(self, timer: Timer) -> None:
@@ -107,6 +144,7 @@ class Controller:
         if timer is None:
             return
         await self._persist()
+        self._notify()
         if not timer.media_player:
             _LOGGER.warning(
                 "Timer %s expired but no media_player for device %s (set a fallback)",
@@ -155,6 +193,18 @@ class Controller:
         if cancel:
             cancel()
         await self._persist()
+        self._notify()
+
+    async def cancel_by_id(self, alert_id: str) -> bool:
+        """Cancel one alert by id (used by the dashboard/service). Also flushes
+        its ring if it happens to be sounding on its device."""
+        timer = self._timers.get(alert_id)
+        if timer is None:
+            return False
+        if timer.device_id:
+            await self.ring.stop(timer.device_id)
+        await self.cancel_timer(timer)
+        return True
 
     async def cancel_all_timers(self, device_id: str | None) -> int:
         victims = self.timers_for(device_id)

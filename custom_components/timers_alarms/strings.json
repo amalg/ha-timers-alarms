@@ -6,7 +6,9 @@
         "description": "Adds device-exact voice timers and alarms. Configure tones and options after setup."
       }
     },
-    "abort": { "already_configured": "Voice Timers & Alarms is already set up." }
+    "abort": {
+      "already_configured": "Voice Timers & Alarms is already set up."
+    }
   },
   "options": {
     "step": {
@@ -16,6 +18,28 @@
           "enable_timers": "Enable timers",
           "enable_alarms": "Enable alarms",
           "fallback_media_player": "Fallback media player (used only when the device you speak to has no speaker)"
+        }
+      }
+    }
+  },
+  "services": {
+    "cancel": {
+      "name": "Cancel alert",
+      "description": "Cancel one active timer or alarm by its id (from the Active Alerts sensor).",
+      "fields": {
+        "id": {
+          "name": "Alert id",
+          "description": "The id of the timer/alarm to cancel."
+        }
+      }
+    },
+    "cancel_all": {
+      "name": "Cancel all alerts",
+      "description": "Cancel every active timer/alarm, optionally only those on one device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "Limit to alerts that ring on this device (omit for all)."
         }
       }
     }

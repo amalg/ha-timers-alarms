@@ -1,0 +1,22 @@
+cancel:
+  name: Cancel alert
+  description: Cancel one active timer or alarm by its id (from the Active Alerts sensor).
+  fields:
+    id:
+      name: Alert id
+      description: The id of the timer/alarm to cancel.
+      required: true
+      example: a1b2c3d4
+      selector:
+        text:
+
+cancel_all:
+  name: Cancel all alerts
+  description: Cancel every active timer/alarm, optionally only those on one device.
+  fields:
+    device_id:
+      name: Device
+      description: Limit to alerts that ring on this device (omit for all).
+      required: false
+      selector:
+        device:
