@@ -16,7 +16,15 @@ from homeassistant.helpers import intent as intent_helper
 
 from . import intents as intents_mod
 from . import panel
-from .const import DATA_CONTROLLER, DOMAIN, PLATFORMS, STATIC_URL_PATH
+from .const import (
+    CONF_ALARM_TONE,
+    CONF_TIMER_TONE,
+    DATA_CONTROLLER,
+    DEFAULTS,
+    DOMAIN,
+    PLATFORMS,
+    STATIC_URL_PATH,
+)
 from .controller import Controller
 from .services import async_register_services, async_unregister_services
 
@@ -35,6 +43,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             [StaticPathConfig(STATIC_URL_PATH, _TONES_DIR, False)]
         )
         domain_data["_static_registered"] = True
+
+    # Migration: entries created before the Alexa tones became the default baked
+    # the old legacy "default" tone into options, so the ring plays the CC sound
+    # instead of Simple Timer/Alarm. There's no UI to pick tones yet (M4), so a
+    # stale "default" is never a deliberate choice — realign it with DEFAULTS.
+    # (Done before building the Controller so it reads the corrected options, and
+    # before the update listener is registered so it triggers no reload.)
+    tone_updates = {
+        k: DEFAULTS[k]
+        for k in (CONF_TIMER_TONE, CONF_ALARM_TONE)
+        if entry.options.get(k) == "default" and DEFAULTS[k] != "default"
+    }
+    if tone_updates:
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, **tone_updates}
+        )
+        _LOGGER.info("Migrated stale default tones to %s", tone_updates)
 
     controller = Controller(hass, entry)
     await controller.async_load()
